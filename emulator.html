@@ -1,0 +1,460 @@
+<!-- 
+
+Habinshuti "Habbes" Clément
+29.05.2014
+Africa Nazarene University
+haby_habbes@live.com
+
+Simple basic emulator for testing USSD on localhost (or any web server) using AJAX
+
+Phone Call icon download from findicons.com: http://findicons.com/icon/download/176021/telephone_black/128/png
+
+-->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Basic USSD Emulator</title>
+<style>
+
+#phone-frame {
+	background-color:black;
+	padding:15px 12px 40px 12px;
+	width:220px;
+	border-radius:20px;
+	font-size:.85em;
+
+}
+
+#phone-frame, pre {
+	font-family:tahoma, calibri, sans-serif;
+	position:relative;
+}
+
+#phone-screen {
+	background-color:rgb(76, 74, 86);
+	background:-o-linear-gradient(-45deg, rgb(76, 74, 86), rgb(97, 95, 107));
+	background:-webkit-linear-gradient(-45deg, rgb(76, 74, 86), rgb(97, 95, 107));
+	background:-moz-linear-gradient(-45deg, rgb(76, 74, 86), rgb(97, 95, 107));
+	background:linear-gradient(-45deg, rgb(76, 74, 86), rgb(97, 95, 107));
+	width:200px;
+	height:300px;
+	padding:10px;
+	border-radius:2px;
+	position:relative;
+}
+
+#phone-msgbox {
+	border-radius:2px;
+	padding-top:10px;
+	padding-bottom:10px;
+	border:2px solid rgb(74, 72, 84);
+	overflow:auto;
+	position:relative;
+	box-shadow:0px 0px 10px;
+	background-color:rgb(200, 198, 210);
+	background:linear-gradient(180deg, rgb(237, 234, 239), rgb(241, 238, 243), rgb(237, 234, 239));
+}
+
+#phone-frame .callbtn-wrapper {
+	text-align:center;
+	position:absolute;
+	bottom:0px;
+	width:220px;
+}
+
+#phone-frame .callbtn {
+	width:30px;
+	cursor:pointer;
+}
+
+#phone-msgbox .footer {
+	
+
+}
+
+
+
+
+#phone-msgbox .wrapper {
+	width:auto;
+	padding-right:10px;
+	padding-left:10px;
+	margin-bottom:5px;
+}
+
+.message-wrapper {
+	overflow-y:auto;
+	word-wrap:break-word;
+	word-break:break-all;
+	max-height:200px;
+	width:100%;
+}
+
+.reply-wrapper {
+	text-align:center;
+}
+
+.replybox{
+	font-family:inherit;
+	border: 1px solid black;
+	box-shadow:0px 0px 2px inset;
+	padding:5px 10px 5px 10px;
+}
+
+.buttons-wrapper {
+	text-align:center;
+}
+
+#phone-frame button {
+	border:1px solid rgb(74, 72, 84);
+	padding:6px 14px 6px 14px;
+	min-width:55px;
+	margin-right:5px;
+	background-color:rgb(148, 146, 148);
+	background:linear-gradient(180deg,  rgb(188, 186, 188), rgb(148, 146, 148));
+	
+	color:white;
+	border-radius:2px;
+	color:rgb(24, 22, 34);
+	font-weight:bold;
+	
+}
+
+#phone-frame button:active {
+	background:linear-gradient(180deg, rgb(148, 146, 148), rgb(188, 186, 188));
+
+}
+
+</style>
+
+<script>
+
+function Ussd(){
+	this.destination = "";
+	this.sessonId = "";
+	this.serviceCode = 0;
+	this.phoneNumber = '';
+	this.text = "";
+	this.sessionParam = "sessionId";
+	this.codeParam = "serviceCode";
+	this.numberParam = "phoneNumber";
+	this.textParam = "text";
+	this.response = new Object();
+	this.response.command = "";
+	this.response.message = "";
+	this.response.raw = "";
+
+	this.setText = function(t){
+		if(this.text == ""){
+			this.text = t;
+		}
+		else {
+			this.text = this.text + "*" + t;
+		}
+	}
+
+	this.send = function(callback){
+		var request = new XMLHttpRequest();
+		if(!/^(http|HTTP).*/.test(this.destination)){
+			this.destination = "http://" + this.destination;
+		}
+		try{
+			request.open("GET", this.destination 
+			+ "?" + this.sessionParam + "=" + encodeURIComponent(this.sessionId)
+			+ "&"+this.codeParam + "=" + encodeURIComponent(this.serviceCode)
+			+ "&" + this.phoneParam + "=" + encodeURIComponent(this.phoneNumber)
+			+ "&" + this.textParam + "=" + encodeURIComponent(this.text)
+			, true);
+		}
+		catch(err){
+			alert("Error: could not open connection");
+		}
+		
+		request.callback = callback;
+		request.ussd = this;
+		request.onreadystatechange = function(){
+			if(this.status == 200 && this.readyState == 4){
+				this.ussd.response.raw = this.responseText;
+				if (this.ussd.parseResponse()){
+					if(this.callback){
+						return this.callback(this.ussd.response);
+					}
+				}
+			}
+			else if(request.readyState == 4){
+				alert("Error: Server status code: " + this.status + " (" + this.statusText + ")");
+			}
+		}
+		try{
+			request.send();
+		}
+		catch(err){
+			alert("Error send request");
+		}
+		
+	}
+
+	this.parseResponse = function(){
+		try{
+			var cmd = this.response.raw.substr(0, 3);
+			this.response.command = cmd.toLowerCase();
+			this.response.message = this.response.raw.slice(3).trim();
+		} catch(err){
+			alert("Parse error, incorrect command format: " + this.response.raw);
+			return false;
+		}
+		return true;
+	}
+}
+
+function Phone(domElement){
+	this.element = domElement;
+	domElement.phone = this;
+	this.msgboxResult = null;
+	
+	this.msgbox = this.element.getElementsByClassName("msgbox-wrapper")[0];
+	this.msgWrapper = this.element.getElementsByClassName("message-wrapper")[0];
+	this.btnWrapper = this.element.getElementsByClassName("buttons-wrapper")[0];
+	this.replyWrapper = this.element.getElementsByClassName("reply-wrapper")[0];
+	this.replyBox = this.element.getElementsByClassName("replybox")[0];
+	this.callBtn = this.element.getElementsByClassName("callbtn")[0];
+
+	this.replyText = "";
+
+	this.closeMsgbox = function(){
+		while(this.msgWrapper.lastChild){
+			this.msgWrapper.removeChild(this.msgWrapper.lastChild);
+		}
+		while(this.btnWrapper.lastChild){
+			this.btnWrapper.removeChild(this.btnWrapper.lastChild);
+		}
+		this.replyBox.value = "";
+		this.replyWrapper.style.display = "none";
+		this.msgbox.style.display = "none";
+	}
+
+	this.showMessage = function(message, buttons, reply){
+		this.closeMsgbox()
+		if("undefined" == typeof(buttons)){
+			buttons = [{text: "OK", result: "ok", onclick: null}];
+		}
+		if("undefined" == typeof(reply)){
+			reply = false
+		}
+		this.msgbox.style.display = "block";
+
+		var pre = document.createElement("PRE");
+		pre.textContent = message;
+		this.msgWrapper.appendChild(pre);
+
+		if(reply){
+			this.replyWrapper.style.display = "block";
+		}
+
+		var btn;
+		for(var i = 0; i < buttons.length; i++){
+			btn = document.createElement("BUTTON");
+			b = buttons[i];
+			btn.textContent = b.text;
+			btn.result = b.result;
+			btn.callback = b.onclick;
+			btn.phone = this;
+			btn.onclick = function(){
+				this.phone.msgboxResult = this.result;
+				this.phone.replyText = this.phone.replyBox.value;
+				this.phone.closeMsgbox();
+				
+				if(this.callback){
+					this.callback();
+				}
+			}
+			this.btnWrapper.appendChild(btn);
+		}
+		
+		
+
+	}
+
+	this.showOkMessage = function(message, callback){
+		this.showMessage(message, [{text:"OK", result:"ok", onclick:callback}], false);
+	}
+
+	this.showSendMessage = function(message, sendCb, cancelCb){
+		this.showMessage(
+			message,
+			[{text:"Send", result:"send", onclick:sendCb}, {text:"Cancel", result:"cancel", onclick:cancelCb}],
+			true
+			);
+	}
+}
+
+
+</script>
+
+</head>
+<body style="font-family:tahoma">
+	<div id="phone-frame">
+		<div id="phone-screen" class="screen">
+			<div id="phone-msgbox" class="msgbox-wrapper" style="display:none">
+				<div class="message-wrapper wrapper"></div>
+				<div class="footer">
+				<div class="reply-wrapper wrapper"><input type="text" class="replybox"/></div>
+				<div class="buttons-wrapper wrapper"></div>
+				</div>
+			</div>
+		</div>
+		<div class="callbtn-wrapper">
+			<img src="telephone_black.png" class="callbtn" />
+		</div>
+	</div>
+
+	<div id="settingsContainer">
+		<h2>Settings</h2>
+		<table>
+			<tr>
+				<td>Destination</td>
+				<td><input type="text" id="s-destination" value="localhost/ussd/ussd.php"/></td>
+			</tr>
+			<tr>
+				<td>Request</td>
+				<td><input type="text" id="s-request" value=""/></td>
+			</tr>
+			<tr>
+				<td>Service Code</td>
+				<td><input type="text" id="s-service-code" value="8923"/></td>
+			</tr>
+			<tr>
+				<td>Phone Number</td>
+				<td><input type="text" id="s-phone-number" value="0700112233"/></td>
+			</tr>
+			<tr>
+				<td>Session ID</td>
+				<td><input type="text" id="s-session-id" value="" disabled="disabled"/></td>
+			</tr>
+		</table>
+		<h3>Query Params</h3>
+		<table>
+			<tr>
+				<td>Request Text</td>
+				<td><input type="text" id="q-text" value="text"/></td>
+			</tr>
+			<tr>
+				<td>Service Code</td>
+				<td><input type="text" id="q-code" value="serviceCode"/></td>
+			</tr>
+			<tr>
+				<td>Phone Number</td>
+				<td><input type="text" id="q-number" value="phoneNumber"/></td>
+			</tr>
+			<tr>
+				<td>Session ID</td>
+				<td><input type="text" id="q-session" value="sessionId" /></td>
+			</tr>
+			<tr>
+				<td>Preview</td>
+				<td><span id="q-preview" disabled></span></td>
+			</tr>
+		</table>
+
+	</div>
+
+<script>
+
+var destBox = document.getElementById("s-destination");
+var codeBox = document.getElementById("s-service-code");
+var numBox = document.getElementById("s-phone-number");
+var sessBox = document.getElementById("s-session-id");
+var reqBox = document.getElementById("s-request");
+
+var qReqBox = document.getElementById("q-text");
+var qCodeBox = document.getElementById("q-code");
+var qNumBox = document.getElementById("q-number");
+var qSessBox = document.getElementById("q-session");
+var previewBox = document.getElementById("q-preview");
+
+
+function generateId(){
+	var maxlen = 15;
+	var minlen = 7;
+	var r = Math.ceil(Math.random() * Math.pow(10, maxlen));
+	var len = minlen + Math.floor(Math.random() * (maxlen + 1 - minlen));
+	r = "" + r;
+	return r.substr(0, len + 1);
+}
+
+var phone = new Phone(document.getElementById("phone-frame"));
+var ussd = new Ussd();
+
+function ussdRespCallback(resp){
+	var msg = resp.message;
+	switch(resp.command){
+		case "con":
+			phone.showSendMessage(msg, function(){
+				ussd.setText(phone.replyText);
+				ussd.send(ussdRespCallback);
+			}, function(){
+				ussd = new Ussd();
+			});
+			break;
+
+		case "end":
+			phone.showOkMessage(msg);
+			ussd = new Ussd();
+			break;
+
+		default:
+			alert("Received unknown command from server: " + resp.command);
+	}
+}
+
+phone.callBtn.onclick = function(){
+	var sessid = generateId();
+	sessBox.value = sessid;
+	ussd.destination = destBox.value;
+	ussd.phoneNumber = numBox.value;
+	ussd.serviceCode = codeBox.value;
+	ussd.sessionId = sessBox.value;
+	
+	ussd.numberParam = qNumBox.value;
+	ussd.codeParam = qCodeBox.value;
+	ussd.sessionParam = qSessBox.value;
+	ussd.textParam = qReqBox.value;
+
+	var t = reqBox.value;
+	parts = t.split("*");
+	for(var i = 0; i < parts.length; i++){
+		if(parts[i] != ""){
+			ussd.setText(parts[i]);
+		}
+	}
+
+	ussd.send(ussdRespCallback);
+}
+
+
+function showRequestPreview(){
+	var req="?" 
+		+ qSessBox.value + "=" + encodeURIComponent(sessBox.value)
+		+ "&" + qCodeBox.value + "=" + encodeURIComponent(codeBox.value)
+		+ "&" + qNumBox.value + "=" + encodeURIComponent(numBox.value)
+		+ "&" + qReqBox.value + "=" + encodeURIComponent(reqBox.value);
+	previewBox.textContent = req;
+}
+
+var inputs = document.getElementById("settingsContainer").getElementsByTagName('INPUT');
+for(var i in inputs){
+	inputs[i].onchange = showRequestPreview;
+	inputs[i].onkeyup = showRequestPreview;
+}
+
+showRequestPreview();
+
+</script>
+
+
+</body>
+
+
+
+</html>
