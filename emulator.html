@@ -163,7 +163,7 @@ function Ussd(){
 			request.open("GET", this.destination 
 			+ "?" + this.sessionParam + "=" + encodeURIComponent(this.sessionId)
 			+ "&"+this.codeParam + "=" + encodeURIComponent(this.serviceCode)
-			+ "&" + this.phoneParam + "=" + encodeURIComponent(this.phoneNumber)
+			+ "&" + this.numberParam + "=" + encodeURIComponent(this.phoneNumber)
 			+ "&" + this.textParam + "=" + encodeURIComponent(this.text)
 			, true);
 		}
